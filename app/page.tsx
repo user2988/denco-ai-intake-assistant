@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import OutputCard from "@/components/OutputCard";
 import IntakeDashboard from "@/components/IntakeDashboard";
-import { IntakeFormData, IntakeOutput, IntakeRecord } from "@/lib/types";
+import PipelineBanner from "@/components/PipelineBanner";
+import MessageBubble from "@/components/MessageBubble";
+import { InputChannel, IntakeFormData, IntakeOutput, IntakeRecord } from "@/lib/types";
 import { SAMPLE_INQUIRIES } from "@/lib/dencoKnowledge";
 
 const STORAGE_KEY = "denco_intakes";
@@ -14,6 +16,22 @@ const urgencyConfig: Record<string, { label: string; classes: string; dot: strin
   Low: { label: "Low", classes: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500" },
 };
 
+const channelOptions: { value: InputChannel; label: string; icon: string }[] = [
+  { value: "sms", label: "Text", icon: "💬" },
+  { value: "whatsapp", label: "WhatsApp", icon: "🟢" },
+  { value: "email", label: "Email", icon: "📧" },
+  { value: "facebook", label: "Facebook", icon: "📘" },
+  { value: "phone", label: "Phone Note", icon: "📞" },
+];
+
+const channelLabels: Record<InputChannel, string> = {
+  sms: "Text Message",
+  whatsapp: "WhatsApp",
+  email: "Email",
+  facebook: "Facebook Messenger",
+  phone: "Phone Note",
+};
+
 function buildFullHandoff(form: IntakeFormData, output: IntakeOutput): string {
   return [
     "═══════════════════════════════════════",
@@ -22,6 +40,7 @@ function buildFullHandoff(form: IntakeFormData, output: IntakeOutput): string {
     "",
     `Customer: ${form.customerName || "—"}`,
     `City: ${form.city || "—"}`,
+    `Channel: ${channelLabels[form.channel]}`,
     `Timeline: ${form.preferredTimeline || "—"}`,
     "",
     "─── DETECTED SERVICES ───",
@@ -56,6 +75,7 @@ export default function Home() {
     city: "",
     inquiry: "",
     preferredTimeline: "",
+    channel: "sms",
   });
   const [output, setOutput] = useState<IntakeOutput | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,12 +133,13 @@ export default function Home() {
 
   const handleSample = (index: number) => {
     const sample = SAMPLE_INQUIRIES[index];
-    setForm({
+    setForm((f) => ({
       customerName: sample.customerName ?? "",
       city: sample.city ?? "",
       inquiry: sample.inquiry,
       preferredTimeline: sample.preferredTimeline ?? "",
-    });
+      channel: f.channel,
+    }));
     setOutput(null);
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -133,31 +154,26 @@ export default function Home() {
       city: currentForm.city,
       inquiry: currentForm.inquiry,
       preferredTimeline: currentForm.preferredTimeline,
+      channel: currentForm.channel,
       output,
     };
-    const updated = [...savedRecords, record];
-    persistRecords(updated);
+    persistRecords([...savedRecords, record]);
     setJustSaved(true);
   };
 
-  const handleClearAll = () => {
-    persistRecords([]);
-  };
+  const handleClearAll = () => persistRecords([]);
 
   const handleLoadRecord = (record: IntakeRecord) => {
-    setForm({
+    const loaded: IntakeFormData = {
       customerName: record.customerName,
       city: record.city,
       inquiry: record.inquiry,
       preferredTimeline: record.preferredTimeline,
-    });
+      channel: record.channel ?? "sms",
+    };
+    setForm(loaded);
     setOutput(record.output);
-    setCurrentForm({
-      customerName: record.customerName,
-      city: record.city,
-      inquiry: record.inquiry,
-      preferredTimeline: record.preferredTimeline,
-    });
+    setCurrentForm(loaded);
     setJustSaved(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -176,23 +192,25 @@ export default function Home() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center shadow-sm">
-              <span className="text-white text-lg">🌿</span>
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">
-                DenCo AI Intake Assistant
-              </h1>
-              <p className="text-xs text-gray-500 leading-tight hidden sm:block">
-                Turn messy landscaping inquiries into quote prep, client replies, and crew handoffs.
-              </p>
-            </div>
+          <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center shadow-sm shrink-0">
+            <span className="text-white text-lg">🌿</span>
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 leading-tight">
+              DenCo AI Intake Assistant
+            </h1>
+            <p className="text-xs text-gray-500 leading-tight hidden sm:block">
+              Turn messy landscaping inquiries into quote prep, client replies, and crew handoffs.
+            </p>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Pipeline banner */}
+        <PipelineBanner />
+
         <div className="lg:grid lg:grid-cols-[420px_1fr] lg:gap-8 xl:grid-cols-[460px_1fr]">
 
           {/* Left panel: Input */}
@@ -223,10 +241,35 @@ export default function Home() {
             >
               <div className="px-5 py-4 border-b border-gray-100">
                 <h2 className="font-semibold text-gray-900">New Intake</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Paste the customer message below</p>
+                <p className="text-xs text-gray-400 mt-0.5">Select the channel and paste the customer message</p>
               </div>
 
               <div className="px-5 py-4 space-y-4">
+
+                {/* Channel selector */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    Incoming Channel
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {channelOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, channel: opt.value }))}
+                        className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                          form.channel === opt.value
+                            ? "bg-green-600 text-white border-green-600 shadow-sm"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-green-400 hover:text-green-700"
+                        }`}
+                      >
+                        <span>{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -254,18 +297,36 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Message preview or textarea */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Customer Inquiry <span className="text-red-500">*</span>
+                    Customer Message <span className="text-red-500">*</span>
                   </label>
-                  <textarea
-                    value={form.inquiry}
-                    onChange={(e) => setForm((f) => ({ ...f, inquiry: e.target.value }))}
-                    placeholder="Paste the customer's email, text, or voicemail note here..."
-                    rows={8}
-                    required
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition resize-none leading-relaxed"
-                  />
+                  {form.inquiry.trim() ? (
+                    <div className="space-y-2">
+                      <MessageBubble
+                        channel={form.channel}
+                        customerName={form.customerName}
+                        inquiry={form.inquiry}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, inquiry: "" }))}
+                        className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        ✕ Clear message
+                      </button>
+                    </div>
+                  ) : (
+                    <textarea
+                      value={form.inquiry}
+                      onChange={(e) => setForm((f) => ({ ...f, inquiry: e.target.value }))}
+                      placeholder={`Paste the customer's ${channelLabels[form.channel].toLowerCase()} here...`}
+                      rows={7}
+                      required
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition resize-none leading-relaxed"
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -329,7 +390,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-700 mb-2">Ready to process an inquiry</h3>
                 <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
-                  Paste a customer message in the form or pick a sample inquiry to see the AI output.
+                  Select a channel, paste a customer message, or pick a sample inquiry.
                 </p>
               </div>
             )}
@@ -350,23 +411,25 @@ export default function Home() {
                     <h2 className="text-lg font-bold text-gray-900">
                       {currentForm.customerName ? `Intake — ${currentForm.customerName}` : "Intake Summary"}
                     </h2>
-                    {currentForm.city && (
-                      <p className="text-sm text-gray-500">{currentForm.city}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {urgency && (
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${urgency.classes}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${urgency.dot}`} />
-                        {urgency.label} Urgency
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {currentForm.city && (
+                        <span className="text-sm text-gray-500">{currentForm.city}</span>
+                      )}
+                      <span className="text-xs bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
+                        via {channelLabels[currentForm.channel]}
                       </span>
-                    )}
+                    </div>
                   </div>
+                  {urgency && (
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${urgency.classes}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${urgency.dot}`} />
+                      {urgency.label} Urgency
+                    </span>
+                  )}
                 </div>
 
                 {/* Cards grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Detected Services */}
                   <OutputCard
                     title="Detected Services"
                     icon="🔍"
@@ -382,7 +445,6 @@ export default function Home() {
                     </div>
                   </OutputCard>
 
-                  {/* Urgency */}
                   <OutputCard
                     title="Urgency Level"
                     icon="🕐"
@@ -396,19 +458,12 @@ export default function Home() {
                           <span className="font-semibold">{output.urgencyLevel}</span>
                         </>
                       )}
-                      {output.urgencyLevel === "High" && (
-                        <span className="text-xs text-red-600 ml-1">— Client has a hard deadline</span>
-                      )}
-                      {output.urgencyLevel === "Medium" && (
-                        <span className="text-xs text-amber-600 ml-1">— Has a preferred timeframe</span>
-                      )}
-                      {output.urgencyLevel === "Low" && (
-                        <span className="text-xs text-green-600 ml-1">— No specific deadline</span>
-                      )}
+                      {output.urgencyLevel === "High" && <span className="text-xs text-red-600 ml-1">— Client has a hard deadline</span>}
+                      {output.urgencyLevel === "Medium" && <span className="text-xs text-amber-600 ml-1">— Has a preferred timeframe</span>}
+                      {output.urgencyLevel === "Low" && <span className="text-xs text-green-600 ml-1">— No specific deadline</span>}
                     </div>
                   </OutputCard>
 
-                  {/* Internal Job Summary */}
                   <OutputCard
                     title="Internal Job Summary"
                     icon="📋"
@@ -418,7 +473,6 @@ export default function Home() {
                     <p className="whitespace-pre-wrap">{output.internalJobSummary}</p>
                   </OutputCard>
 
-                  {/* Missing Information */}
                   <OutputCard
                     title="Missing Information"
                     icon="❓"
@@ -439,7 +493,6 @@ export default function Home() {
                     )}
                   </OutputCard>
 
-                  {/* Client Reply Draft */}
                   <OutputCard
                     title="Client Reply Draft"
                     icon="✉️"
@@ -449,7 +502,6 @@ export default function Home() {
                     <p className="whitespace-pre-wrap">{output.clientReplyDraft}</p>
                   </OutputCard>
 
-                  {/* Crew / Job Notes */}
                   <OutputCard
                     title="Crew / Job Notes"
                     icon="👷"
@@ -459,7 +511,6 @@ export default function Home() {
                     <p className="whitespace-pre-wrap">{output.crewNotes}</p>
                   </OutputCard>
 
-                  {/* Follow-Up Message */}
                   <OutputCard
                     title="Follow-Up Message"
                     icon="💬"
@@ -469,7 +520,6 @@ export default function Home() {
                     <p className="whitespace-pre-wrap">{output.followUpMessage}</p>
                   </OutputCard>
 
-                  {/* Admin Time Saved */}
                   <OutputCard
                     title="Estimated Admin Time Saved"
                     icon="⏱️"
@@ -532,7 +582,6 @@ export default function Home() {
         />
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-gray-200 mt-16 py-6 text-center text-xs text-gray-400">
         DenCo AI Intake Assistant · Built with Next.js & Claude · Not for public distribution
       </footer>

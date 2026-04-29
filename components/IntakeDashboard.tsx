@@ -130,7 +130,12 @@ export default function IntakeDashboard({ records, onClear, onLoad }: IntakeDash
                       {record.output.urgencyLevel}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{formatDate(record.createdAt)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {formatDate(record.createdAt)}
+                    {record.channel && (
+                      <span className="ml-2 text-gray-400">· via {record.channel === "sms" ? "Text" : record.channel === "whatsapp" ? "WhatsApp" : record.channel === "email" ? "Email" : record.channel === "facebook" ? "Facebook" : "Phone"}</span>
+                    )}
+                  </p>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {record.output.detectedServices.map((s) => (
                       <span

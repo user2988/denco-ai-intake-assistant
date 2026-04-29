@@ -1,5 +1,7 @@
 export type UrgencyLevel = "Low" | "Medium" | "High";
 
+export type InputChannel = "whatsapp" | "sms" | "email" | "facebook" | "phone";
+
 export interface IntakeOutput {
   detectedServices: string[];
   urgencyLevel: UrgencyLevel;
@@ -18,6 +20,7 @@ export interface IntakeRecord {
   city: string;
   inquiry: string;
   preferredTimeline: string;
+  channel: InputChannel;
   output: IntakeOutput;
 }
 
@@ -26,6 +29,7 @@ export interface IntakeFormData {
   city: string;
   inquiry: string;
   preferredTimeline: string;
+  channel: InputChannel;
 }
 
 export interface SampleInquiry {
