@@ -98,7 +98,8 @@ The JSON must match this exact schema:
   "clientReplyDraft": "string",
   "crewNotes": "string",
   "followUpMessage": "string",
-  "estimatedAdminTimeSavedMinutes": number
+  "estimatedAdminTimeSavedMinutes": number,
+  "recommendedNextAction": "string"
 }
 
 Rules:
@@ -114,5 +115,6 @@ Rules:
 - Keep crew notes short, operational, and bullet-pointed where helpful.
 - The followUpMessage should be a short, friendly SMS or email-style nudge if the client hasn't responded in a few days.
 - estimatedAdminTimeSavedMinutes should reflect how long a human would realistically take to write all these outputs manually (typically 15-35 minutes for a complete intake).
+- recommendedNextAction should be one clear sentence telling the office team what to do next (e.g. "Send client reply and request photos before scheduling a site visit.").
 - If the inquiry is very brief or unclear, still produce all fields and use missingInformation to flag what is needed.
 - Urgency: High = client has a hard deadline or event soon; Medium = prefers a timeframe but flexible; Low = no timeline mentioned.`;

@@ -11,6 +11,22 @@ export interface IntakeOutput {
   crewNotes: string;
   followUpMessage: string;
   estimatedAdminTimeSavedMinutes: number;
+  recommendedNextAction?: string;
+}
+
+export type IntakeSource = "email" | "whatsapp" | "sms" | "website" | "facebook" | "manual" | "other";
+
+export interface AutomatedIntakeRequest {
+  source: IntakeSource;
+  customerName?: string;
+  phone?: string;
+  email?: string;
+  city?: string;
+  preferredTimeline?: string;
+  subject?: string;
+  message?: string;
+  rawEmailText?: string;
+  timestamp?: string;
 }
 
 export interface IntakeRecord {
