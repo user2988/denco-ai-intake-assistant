@@ -30,7 +30,7 @@ function formatDate(iso: string): string {
   });
 }
 
-const urgencyColors = {
+const urgencyColors: Record<string, string> = {
   High: "bg-red-100 text-red-700",
   Medium: "bg-amber-100 text-amber-700",
   Low: "bg-green-100 text-green-700",
@@ -125,7 +125,7 @@ export default function IntakeDashboard({ records, onClear, onLoad }: IntakeDash
                       <span className="text-xs text-gray-500">&bull; {record.city}</span>
                     )}
                     <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${urgencyColors[record.output.urgencyLevel]}`}
+                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${urgencyColors[record.output.urgencyLevel] ?? "bg-gray-100 text-gray-700"}`}
                     >
                       {record.output.urgencyLevel}
                     </span>

@@ -8,7 +8,7 @@ import { SAMPLE_INQUIRIES } from "@/lib/dencoKnowledge";
 
 const STORAGE_KEY = "denco_intakes";
 
-const urgencyConfig = {
+const urgencyConfig: Record<string, { label: string; classes: string; dot: string }> = {
   High: { label: "High", classes: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500" },
   Medium: { label: "Medium", classes: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500" },
   Low: { label: "Low", classes: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500" },

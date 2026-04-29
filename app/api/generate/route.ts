@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const validationError = validateIntakeOutput(parsed);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 500 });
+    }
+
     return NextResponse.json({ output: parsed });
   } catch (error: unknown) {
     console.error("Generate API error:", error);
@@ -60,6 +65,22 @@ export async function POST(request: NextRequest) {
       error instanceof Error ? error.message : "Internal server error.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function validateIntakeOutput(data: unknown): string | null {
+  if (!data || typeof data !== "object") return "Response is not an object.";
+  const d = data as Record<string, unknown>;
+  if (!Array.isArray(d.detectedServices)) return "Missing detectedServices array.";
+  if (!["Low", "Medium", "High"].includes(d.urgencyLevel as string))
+    return "Invalid urgencyLevel value.";
+  if (typeof d.internalJobSummary !== "string") return "Missing internalJobSummary.";
+  if (!Array.isArray(d.missingInformation)) return "Missing missingInformation array.";
+  if (typeof d.clientReplyDraft !== "string") return "Missing clientReplyDraft.";
+  if (typeof d.crewNotes !== "string") return "Missing crewNotes.";
+  if (typeof d.followUpMessage !== "string") return "Missing followUpMessage.";
+  if (typeof d.estimatedAdminTimeSavedMinutes !== "number")
+    return "Missing estimatedAdminTimeSavedMinutes.";
+  return null;
 }
 
 function buildUserMessage({
