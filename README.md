@@ -104,16 +104,16 @@ denco-ai-intake-assistant/
 
 ---
 
-## Automated Intake API for n8n
+## Zapier Email Automation Demo
 
 ### What it is
 
-`POST /api/intakes` lets n8n, Make, Zapier, or any automation tool send customer inquiries directly into the DenCo AI Intake Assistant. It accepts email, WhatsApp, SMS, website form, Facebook, or manual payloads and returns a fully structured intake ready for the next step in your workflow.
+`POST /api/intakes` accepts customer inquiries from Zapier (or any HTTP tool) and returns a fully structured AI intake. In the live demo, a customer email triggers Zapier → Zapier calls this endpoint → Claude processes the inquiry and returns quote prep, a client reply draft, crew notes, and more.
 
 ### Endpoint
 
 ```
-POST https://YOUR-VERCEL-URL/api/intakes
+POST https://YOUR-VERCEL-APP.vercel.app/api/intakes
 Content-Type: application/json
 ```
 
@@ -123,30 +123,56 @@ Content-Type: application/json
 |---|---|---|---|
 | `source` | string | No | `email`, `whatsapp`, `sms`, `website`, `facebook`, `manual`, `other` |
 | `message` | string | Yes* | The customer's message |
-| `rawEmailText` | string | Yes* | Raw email body — used if `message` is absent |
+| `rawEmailText` | string | Yes* | Alias — used if `message` is absent |
+| `body_plain` | string | Yes* | Alias — Zapier's default email body field |
+| `body` | string | Yes* | Alias — fallback |
 | `customerName` | string | No | Customer's full name |
 | `email` | string | No | Customer's email address |
 | `phone` | string | No | Customer's phone number |
 | `city` | string | No | City or service area |
 | `preferredTimeline` | string | No | When they want the work done |
-| `subject` | string | No | Email subject line or message title |
+| `subject` | string | No | Email subject line |
 | `timestamp` | string | No | ISO 8601 timestamp of the original message |
 
-\* At least one of `message` or `rawEmailText` is required.
+\* At least one message field is required. Empty strings are treated as absent (Zapier-safe).
 
-### Example request — email via n8n
+### Zapier setup
 
-```json
-{
-  "source": "email",
-  "customerName": "Sarah Johnson",
-  "email": "sarah@example.com",
-  "city": "Burlington",
-  "subject": "Backyard cleanup and mulch quote",
-  "message": "Hi, my backyard needs a cleanup. There are leaves everywhere, the garden beds are overgrown, and I might want mulch too. Can someone come this week?",
-  "timestamp": "2026-04-29T14:30:00Z"
-}
-```
+**Step 1 — Trigger: Gmail**
+- App: Gmail
+- Event: **New Email Matching Search** (or New Email)
+- Search filter:
+  ```
+  to:dencolandscaping@gmail.com subject:(quote OR estimate OR cleanup OR landscaping)
+  ```
+
+**Step 2 — Action: Webhooks by Zapier**
+- App: Webhooks by Zapier
+- Event: **Custom Request**
+- Method: `POST`
+- URL: `https://YOUR-VERCEL-APP.vercel.app/api/intakes`
+- Data Pass-Through: `false`
+- Headers:
+  ```
+  Content-Type: application/json
+  ```
+- Body (raw JSON):
+  ```json
+  {
+    "source": "email",
+    "customerName": "{{From Name}}",
+    "email": "{{From Email}}",
+    "subject": "{{Subject}}",
+    "message": "{{Body Plain}}",
+    "timestamp": "{{Date}}"
+  }
+  ```
+
+**Step 3 — Optional next steps**
+- **Google Sheets** — log each intake row automatically
+- **Gmail** — create a draft reply using `clientReplyDraft` for owner approval
+- **Email / Slack** — notify the DenCo team of a new high-urgency lead
+- **CRM** — create a new contact or deal record
 
 ### Example response
 
@@ -180,53 +206,28 @@ Content-Type: application/json
 ```json
 {
   "success": false,
-  "error": "Request must include a non-empty 'message' or 'rawEmailText' field."
+  "error": "Request must include a non-empty 'message', 'rawEmailText', 'body_plain', or 'body' field."
 }
-```
-
-### n8n workflow setup
-
-```
-Gmail Trigger  (or IMAP Email Trigger)
-       ↓
-Set node  →  map sender name, email, subject, body, timestamp
-       ↓
-HTTP Request node
-  Method: POST
-  URL: https://YOUR-VERCEL-URL/api/intakes
-  Body (JSON):
-    source: "email"
-    customerName: {{ $json.from.name }}
-    email: {{ $json.from.email }}
-    subject: {{ $json.subject }}
-    message: {{ $json.text }}
-    timestamp: {{ $json.date }}
-       ↓
-Receive structured intake JSON
-       ↓
-Optional: Google Sheets node to log the intake
-Optional: Gmail node to send clientReplyDraft for human approval
-Optional: Slack node to notify the team
 ```
 
 ### Example curl
 
 ```bash
-curl -X POST https://YOUR-VERCEL-URL/api/intakes \
+curl -X POST https://YOUR-VERCEL-APP.vercel.app/api/intakes \
   -H "Content-Type: application/json" \
   -d '{
     "source": "email",
     "customerName": "Sarah Johnson",
     "email": "sarah@example.com",
     "city": "Burlington",
-    "subject": "Backyard cleanup quote",
-    "message": "Hi, I need a spring cleanup and possibly some mulching. Can you quote?"
+    "subject": "Backyard cleanup and mulch quote",
+    "message": "Hi, my backyard needs a cleanup. There are leaves everywhere, the garden beds are overgrown, and I might want mulch too. Can someone come this week?"
   }'
 ```
 
 ### Adding authentication
 
-The endpoint is currently open. To add API key protection, see the comment in `app/api/intakes/route.ts` — it shows exactly where to add header-based auth with an `INTAKE_API_KEY` environment variable.
+The endpoint is currently open (suitable for demos). To add API key protection, see the comment in `app/api/intakes/route.ts` — it shows exactly where to add header-based auth with an `INTAKE_API_KEY` environment variable.
 
 ---
 
