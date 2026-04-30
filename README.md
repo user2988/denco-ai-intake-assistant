@@ -31,7 +31,8 @@ The mini dashboard tracks total intakes, cumulative admin time saved, and the mo
 - **TypeScript**
 - **Tailwind CSS**
 - **Anthropic Claude API** (`claude-sonnet-4-6`)
-- **Local Storage** (no database required)
+- **Neon Postgres** (persistent intake storage via `@neondatabase/serverless`)
+- **localStorage** (client-side fallback for manual intakes)
 
 ---
 
@@ -62,9 +63,13 @@ Edit `.env.local`:
 
 ```
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
+DATABASE_URL=your_neon_database_url_here
+AUTOMATION_API_KEY=your_secret_key_here   # optional — leave blank to skip auth locally
 ```
 
-Get your API key at [console.anthropic.com](https://console.anthropic.com).
+- **ANTHROPIC_API_KEY** — from [console.anthropic.com](https://console.anthropic.com)
+- **DATABASE_URL** — Neon connection string from [console.neon.tech](https://console.neon.tech) (format: `postgresql://user:password@host/dbname?sslmode=require`)
+- **AUTOMATION_API_KEY** — optional secret that protects `POST /api/intakes` from unauthenticated callers
 
 ### 4. Run locally
 
@@ -84,20 +89,25 @@ denco-ai-intake-assistant/
 │   ├── api/
 │   │   ├── generate/
 │   │   │   └── route.ts        # Manual web form → Claude (used by frontend)
-│   │   └── intakes/
-│   │       └── route.ts        # Automated pipeline endpoint (used by n8n)
+│   │   ├── intakes/
+│   │   │   └── route.ts        # POST: Zapier/email pipeline → Claude → Neon
+│   │   │                       # GET:  Returns recent intakes for the dashboard
+│   │   └── save-intake/
+│   │       └── route.ts        # Saves a manually generated intake to Neon
 │   ├── globals.css
 │   ├── layout.tsx
 │   └── page.tsx                # Main app UI
 ├── components/
+│   ├── AutomatedInbox.tsx      # DB-backed intake inbox with metrics + copy buttons
 │   ├── OutputCard.tsx          # Reusable output section card
-│   ├── IntakeDashboard.tsx     # Intake history & metrics
+│   ├── IntakeDashboard.tsx     # localStorage fallback history
 │   ├── PipelineBanner.tsx      # Visual pipeline diagram
 │   └── MessageBubble.tsx       # Channel-styled message preview
 ├── lib/
+│   ├── db.ts                   # Neon client, saveIntake(), getRecentIntakes()
 │   ├── generateIntake.ts       # Shared Claude call + validation helper
 │   ├── dencoKnowledge.ts       # Business context, sample inquiries, system prompt
-│   └── types.ts                # TypeScript interfaces
+│   └── types.ts                # TypeScript interfaces (incl. SavedIntake)
 ├── .env.example
 └── README.md
 ```
@@ -225,9 +235,23 @@ curl -X POST https://YOUR-VERCEL-APP.vercel.app/api/intakes \
   }'
 ```
 
-### Adding authentication
+### Automated Intake Inbox (dashboard)
 
-The endpoint is currently open (suitable for demos). To add API key protection, see the comment in `app/api/intakes/route.ts` — it shows exactly where to add header-based auth with an `INTAKE_API_KEY` environment variable.
+Every intake created via `POST /api/intakes` is saved to Neon and automatically appears in the **Automated Intake Inbox** section of the web dashboard. The dashboard fetches `GET /api/intakes` on load and can be refreshed at any time with the **Refresh Intakes** button.
+
+Manually generated intakes (via the web form) are also saved to the same database when the user clicks **Save Intake**, so all intakes are visible in one place.
+
+Zapier can still use `clientReplyDraft` from the API response to create a Gmail draft — the dashboard display and the Zapier draft flow are fully independent.
+
+### Authentication
+
+If `AUTOMATION_API_KEY` is set as an environment variable, `POST /api/intakes` requires every request to include:
+
+```
+X-Automation-Key: <your-value>
+```
+
+In Zapier, add this as a custom header in the Webhooks action. If the variable is not set, the check is skipped (safe for local development).
 
 ---
 
@@ -241,9 +265,39 @@ The Anthropic API key is **never exposed to the browser**. All Claude calls are 
 
 1. Push this repository to GitHub
 2. Go to [vercel.com](https://vercel.com) and import the repository
-3. In the Vercel project settings, add the environment variable:
-   - `ANTHROPIC_API_KEY` = your API key
+3. In the Vercel project settings, add these environment variables:
+   - `ANTHROPIC_API_KEY` — your Anthropic API key
+   - `DATABASE_URL` — your Neon Postgres connection string
+   - `AUTOMATION_API_KEY` — (optional) secret header value for Zapier protection
 4. Deploy — Vercel handles the rest
+
+### Create the Neon table
+
+Before deploying, run the following SQL once in your [Neon SQL editor](https://console.neon.tech):
+
+```sql
+CREATE TABLE IF NOT EXISTS intakes (
+  id                                text PRIMARY KEY,
+  source                            text,
+  customer_name                     text,
+  customer_email                    text,
+  phone                             text,
+  city                              text,
+  preferred_timeline                text,
+  subject                           text,
+  original_message                  text,
+  detected_services                 jsonb,
+  urgency_level                     text,
+  internal_job_summary              text,
+  missing_information               jsonb,
+  client_reply_draft                text,
+  crew_notes                        text,
+  follow_up_message                 text,
+  recommended_next_action           text,
+  estimated_admin_time_saved_minutes integer,
+  created_at                        timestamptz DEFAULT now()
+);
+```
 
 ---
 

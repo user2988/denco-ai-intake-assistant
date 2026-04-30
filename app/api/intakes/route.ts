@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateIntakeWithClaude } from "@/lib/generateIntake";
+import { saveIntake, getRecentIntakes } from "@/lib/db";
 import { AutomatedIntakeRequest, IntakeSource } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
-// Authentication placeholder
-// To add API key protection, uncomment and set INTAKE_API_KEY in your env:
-//
-// const VALID_API_KEY = process.env.INTAKE_API_KEY;
-//
-// function isAuthorized(request: NextRequest): boolean {
-//   const key = request.headers.get("x-api-key");
-//   return !!VALID_API_KEY && key === VALID_API_KEY;
-// }
+// Optional Zapier / automation secret — protects this endpoint from
+// unauthenticated callers.  Set AUTOMATION_API_KEY in your Vercel environment
+// variables, then configure Zapier to send:
+//   Header: X-Automation-Key: <your-value>
+// If the variable is not set the check is skipped (safe for local dev).
 // ---------------------------------------------------------------------------
+function isAuthorized(request: NextRequest): boolean {
+  const requiredKey = process.env.AUTOMATION_API_KEY;
+  if (!requiredKey) return true; // not enforced when key is absent
+  const provided = request.headers.get("x-automation-key");
+  return provided === requiredKey;
+}
 
 const VALID_SOURCES: IntakeSource[] = [
   "email", "whatsapp", "sms", "website", "facebook", "manual", "other",
@@ -24,9 +27,32 @@ function clean(val: unknown): string | undefined {
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/intakes — return recent intakes for the dashboard
+// ---------------------------------------------------------------------------
+export async function GET() {
+  try {
+    const intakes = await getRecentIntakes(50);
+    return NextResponse.json({ success: true, intakes });
+  } catch (error: unknown) {
+    console.error("GET /api/intakes error:", error);
+    const message =
+      error instanceof Error ? error.message : "Internal server error.";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/intakes — called by Zapier; generates intake and saves to DB
+// ---------------------------------------------------------------------------
 export async function POST(request: NextRequest) {
   try {
-    // -- Auth placeholder: check isAuthorized(request) here when ready --
+    if (!isAuthorized(request)) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let raw: any;
@@ -78,19 +104,26 @@ export async function POST(request: NextRequest) {
       id: crypto.randomUUID(),
       source,
       customerName: clean(body.customerName) ?? null,
+      customerEmail: clean(body.email) ?? null,
       phone: clean(body.phone) ?? null,
-      email: clean(body.email) ?? null,
       city: clean(body.city) ?? null,
       preferredTimeline: clean(body.preferredTimeline) ?? null,
       subject: clean(body.subject) ?? null,
       originalMessage: inquiry,
-      createdAt: clean(body.timestamp) ?? new Date().toISOString(),
       ...output,
+      recommendedNextAction: output.recommendedNextAction ?? null,
     };
+
+    // Persist to Neon — non-fatal if DB is unavailable so Zapier still gets a response
+    try {
+      await saveIntake(intake);
+    } catch (dbErr) {
+      console.error("DB save failed (intake still returned to Zapier):", dbErr);
+    }
 
     return NextResponse.json({ success: true, intake });
   } catch (error: unknown) {
-    console.error("Intakes API error:", error);
+    console.error("POST /api/intakes error:", error);
     const message =
       error instanceof Error ? error.message : "Internal server error.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

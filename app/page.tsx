@@ -3,33 +3,40 @@
 import { useState, useEffect, useCallback } from "react";
 import OutputCard from "@/components/OutputCard";
 import IntakeDashboard from "@/components/IntakeDashboard";
+import AutomatedInbox from "@/components/AutomatedInbox";
 import PipelineBanner from "@/components/PipelineBanner";
 import MessageBubble from "@/components/MessageBubble";
-import { InputChannel, IntakeFormData, IntakeOutput, IntakeRecord } from "@/lib/types";
+import {
+  InputChannel,
+  IntakeFormData,
+  IntakeOutput,
+  IntakeRecord,
+  SavedIntake,
+} from "@/lib/types";
 import { SAMPLE_INQUIRIES } from "@/lib/dencoKnowledge";
 
 const STORAGE_KEY = "denco_intakes";
 
 const urgencyConfig: Record<string, { label: string; classes: string; dot: string }> = {
-  High: { label: "High", classes: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500" },
+  High:   { label: "High",   classes: "bg-red-100 text-red-700 border-red-200",     dot: "bg-red-500" },
   Medium: { label: "Medium", classes: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500" },
-  Low: { label: "Low", classes: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500" },
+  Low:    { label: "Low",    classes: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500" },
 };
 
 const channelOptions: { value: InputChannel; label: string; icon: string }[] = [
-  { value: "sms", label: "Text", icon: "💬" },
-  { value: "whatsapp", label: "WhatsApp", icon: "🟢" },
-  { value: "email", label: "Email", icon: "📧" },
-  { value: "facebook", label: "Facebook", icon: "📘" },
-  { value: "phone", label: "Phone Note", icon: "📞" },
+  { value: "sms",      label: "Text",        icon: "💬" },
+  { value: "whatsapp", label: "WhatsApp",    icon: "🟢" },
+  { value: "email",    label: "Email",       icon: "📧" },
+  { value: "facebook", label: "Facebook",    icon: "📘" },
+  { value: "phone",    label: "Phone Note",  icon: "📞" },
 ];
 
 const channelLabels: Record<InputChannel, string> = {
-  sms: "Text Message",
+  sms:      "Text Message",
   whatsapp: "WhatsApp",
-  email: "Email",
+  email:    "Email",
   facebook: "Facebook Messenger",
-  phone: "Phone Note",
+  phone:    "Phone Note",
 };
 
 function buildFullHandoff(form: IntakeFormData, output: IntakeOutput): string {
@@ -80,11 +87,19 @@ export default function Home() {
   const [output, setOutput] = useState<IntakeOutput | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // localStorage-backed records (fallback / legacy)
   const [savedRecords, setSavedRecords] = useState<IntakeRecord[]>([]);
+
+  // DB-backed intakes
+  const [dbIntakes, setDbIntakes] = useState<SavedIntake[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+
   const [justSaved, setJustSaved] = useState(false);
   const [fullHandoffCopied, setFullHandoffCopied] = useState(false);
   const [currentForm, setCurrentForm] = useState<IntakeFormData | null>(null);
 
+  // Load localStorage records on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -93,6 +108,27 @@ export default function Home() {
       // ignore corrupt storage
     }
   }, []);
+
+  // Fetch intakes from Neon via GET /api/intakes
+  const fetchDbIntakes = useCallback(async () => {
+    setDbLoading(true);
+    try {
+      const res = await fetch("/api/intakes");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.intakes)) {
+        setDbIntakes(data.intakes);
+      }
+    } catch {
+      // silently fail — DB may not be configured in local dev
+    } finally {
+      setDbLoading(false);
+    }
+  }, []);
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchDbIntakes();
+  }, [fetchDbIntakes]);
 
   const persistRecords = useCallback((records: IntakeRecord[]) => {
     setSavedRecords(records);
@@ -145,10 +181,14 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleSaveIntake = () => {
+  const handleSaveIntake = async () => {
     if (!output || !currentForm) return;
+
+    const id = crypto.randomUUID();
+
+    // Always save to localStorage as fallback
     const record: IntakeRecord = {
-      id: crypto.randomUUID(),
+      id,
       createdAt: new Date().toISOString(),
       customerName: currentForm.customerName,
       city: currentForm.city,
@@ -159,6 +199,19 @@ export default function Home() {
     };
     persistRecords([...savedRecords, record]);
     setJustSaved(true);
+
+    // Also save to Neon (server-side; DATABASE_URL never leaves the server)
+    try {
+      await fetch("/api/save-intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, form: currentForm, output }),
+      });
+      // Refresh the inbox so the new record appears immediately
+      fetchDbIntakes();
+    } catch {
+      // Non-fatal — localStorage already captured it
+    }
   };
 
   const handleClearAll = () => persistRecords([]);
@@ -566,7 +619,7 @@ export default function Home() {
                     }`}
                   >
                     <span>{justSaved ? "✓" : "💾"}</span>
-                    {justSaved ? "Saved to History" : "Save Intake"}
+                    {justSaved ? "Saved to Database" : "Save Intake"}
                   </button>
                 </div>
               </div>
@@ -574,7 +627,14 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Dashboard */}
+        {/* Automated Intake Inbox (DB-backed) */}
+        <AutomatedInbox
+          intakes={dbIntakes}
+          loading={dbLoading}
+          onRefresh={fetchDbIntakes}
+        />
+
+        {/* Legacy localStorage history */}
         <IntakeDashboard
           records={savedRecords}
           onClear={handleClearAll}

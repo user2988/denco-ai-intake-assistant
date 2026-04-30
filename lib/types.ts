@@ -55,3 +55,26 @@ export interface SampleInquiry {
   city?: string;
   preferredTimeline?: string;
 }
+
+/** A full intake record as stored in and returned from Neon. */
+export interface SavedIntake {
+  id: string;
+  source: IntakeSource;
+  customerName: string | null;
+  customerEmail: string | null;
+  phone: string | null;
+  city: string | null;
+  preferredTimeline: string | null;
+  subject: string | null;
+  originalMessage: string;
+  detectedServices: string[];
+  urgencyLevel: UrgencyLevel;
+  internalJobSummary: string;
+  missingInformation: string[];
+  clientReplyDraft: string;
+  crewNotes: string;
+  followUpMessage: string;
+  recommendedNextAction: string | null;
+  estimatedAdminTimeSavedMinutes: number;
+  createdAt: string;
+}
